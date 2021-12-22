@@ -1,6 +1,6 @@
 from torch.autograd import Function
 
-
+# 假量化
 class FakeQuantize(Function):
 
     @staticmethod
