@@ -17,7 +17,7 @@ def train(model, device, train_loader, optimizer, epoch):
         output = model(data) # 模型的输出
         loss = lossLayer(output, target) # 一个batch的训练损失
         loss.backward() # 损失反向传播
-        optimizer.step() # 优化
+        optimizer.step() # 优化 
 
         if batch_idx % 50 == 0: # 每50个batch打印一次损失
             print('Train Epoch: {} [{}/{}]\tLoss: {:.6f}'.format(
