@@ -9,7 +9,7 @@ from torch.autograd import Variable
 from function import FakeQuantize
 
 # 1/11，按照uint，计算scale和zeropoint，都是浮点
-# min_val, max_val需要根据具体情况专门统计
+# min_val, max_val需要根据具体情况专门统计，但是符号非符号的距离都一样
 def calcScaleZeroPoint(min_val, max_val, num_bits=8, signed=False):
     if signed: # 举个例子，对于int8，qmin=-128. ,qmax=127.
         qmin = - 2. ** (num_bits - 1)
@@ -115,7 +115,7 @@ class QParam(nn.Module):
             value.data = state_dict[prefix + key].data
             state_dict.pop(prefix + key)
 
-    # info为一个字符串，包括scale zeropoint min max
+    # __str__会自动调用；info为一个字符串，包括scale zeropoint min max
     def __str__(self):
         info = 'scale: %.10f ' % self.scale # scale精确到小数点后10位
         info += 'zp: %d ' % self.zero_point # zero_point整体print
@@ -135,7 +135,7 @@ class QModule(nn.Module):
         if qi:
             self.qi = QParam(num_bits=num_bits) # 若接收qi，则为info s,z,min,max
         if qo:
-            self.qo = QParam(num_bits=num_bits) # 若接收qi，则为info s,z,min,max
+            self.qo = QParam(num_bits=num_bits) # 若接收qo，则为info s,z,min,max
 
     #　在统计完 min、max 后发挥作用。可把一些项提前固定下来，同时将网络的权重由浮点实数转化为定点整数
     def freeze(self):
@@ -167,6 +167,7 @@ class QConv2d(QModule):
             raise ValueError('qo has been provided in init function.')
         if not hasattr(self, 'qo') and qo is None:
             raise ValueError('qo is not existed, should be provided.')
+        
         # qi非空，把qi传给self.qi；qo为空，把qo传给self.qo;随后计算M
         if qi is not None:
             self.qi = qi
@@ -177,20 +178,23 @@ class QConv2d(QModule):
         # 量化权重，(r/s+z)，后为r/s
         self.conv_module.weight.data = self.qw.quantize_tensor(self.conv_module.weight.data)
         self.conv_module.weight.data = self.conv_module.weight.data - self.qw.zero_point
-        # 量化bias,量化为float32，zp为零
+        # 量化bias,量化 r/s 为float32，zp为零
         self.conv_module.bias.data = quantize_tensor(self.conv_module.bias.data,
                                                      scale=self.qi.scale * self.qw.scale,
                                                      zero_point=0, num_bits=32, signed=True)
 
     # 同正常的forward一样在float进行，需要统计输入输出以及 weight 的 min、max
     def forward(self, x):
-        # 有qi，则用x更新qi,FakeQuantize
+        
+        # 有qi，则用x更新qi对应参数,FakeQuantize
         if hasattr(self, 'qi'):
             self.qi.update(x) # 统计样本x，更新qi：min、max值，且计算scale和zeropoint
-            x = FakeQuantize.apply(x, self.qi) # 用qi进行假量化
-        # 用conv_module.weight更新qw
+            x = FakeQuantize.apply(x, self.qi) # 用qi对x进行假量化
+
+        # 用conv_module.weight更新qw对应参数
         self.qw.update(self.conv_module.weight.data) # 统计样本权重，更新qw：min、max值，且计算scale和zeropoint
 
+        # 定义卷积：x，bias不变，权重做假量化
         x = F.conv2d(x, FakeQuantize.apply(self.conv_module.weight, self.qw), self.conv_module.bias, 
                      stride=self.conv_module.stride,
                      padding=self.conv_module.padding, dilation=self.conv_module.dilation, 
@@ -220,7 +224,7 @@ class QLinear(QModule):
         super(QLinear, self).__init__(qi=qi, qo=qo, num_bits=num_bits)
         self.num_bits = num_bits
         self.fc_module = fc_module
-        self.qw = QParam(num_bits=num_bits)
+        self.qw = QParam(num_bits=num_bits) # 得到qw的参数
 
     def freeze(self, qi=None, qo=None):
 
@@ -296,7 +300,7 @@ class QReLU(QModule):
     
     def quantize_inference(self, x):
         x = x.clone()
-        x[x < self.qi .zero_point] = self.qi.zero_point
+        x[x < self.qi.zero_point] = self.qi.zero_point
         return x
 
 class QMaxPooling2d(QModule):

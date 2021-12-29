@@ -7,7 +7,7 @@ from torchvision import datasets, transforms
 import os
 import os.path as osp
 
-
+# ------------------------------普通训练【使用普通forward】与测试----------------------------------
 def train(model, device, train_loader, optimizer, epoch):
     model.train()
     lossLayer = torch.nn.CrossEntropyLoss() # 确定损失函数
@@ -32,9 +32,9 @@ def test(model, device, test_loader):
     for data, target in test_loader: # 按batchsize不断取batch测试
         data, target = data.to(device), target.to(device) # 待测试数据与标签
         output = model(data)
-        test_loss += lossLayer(output, target).item() # 一个batch的测试损失
-        pred = output.argmax(dim=1, keepdim=True) # 
-        correct += pred.eq(target.view_as(pred)).sum().item()
+        test_loss += lossLayer(output, target).item() # 之前batch的测试损失
+        pred = output.argmax(dim=1, keepdim=True) # 因为MNIST为十分类，选择可能性最大的预测的 索引
+        correct += pred.eq(target.view_as(pred)).sum().item() # 预测对了的样本总个数
     
     test_loss /= len(test_loader.dataset) # 每个样本的平均损失
 

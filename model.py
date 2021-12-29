@@ -7,14 +7,14 @@ from module import *
 
 class Net(nn.Module):
 
-    # 可改-定义网络会用到的操作
+    # 可改-定义网络的普通操作
     def __init__(self, num_channels=1):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(num_channels, 40, 3, 1)
         self.conv2 = nn.Conv2d(40, 40, 3, 1, groups=20)
         self.fc = nn.Linear(5*5*40, 10)
 
-    # 可改-定义网络前向传播逻辑
+    # 可改-网络的普通前向传播
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = F.max_pool2d(x, 2, 2)
@@ -24,7 +24,7 @@ class Net(nn.Module):
         x = self.fc(x)
         return x
 
-    # 可改-使用quantize，逐个量化每个模块
+    # 可改-量化：设置量化函数的功能
     # 只有第一层的 conv 需要 qi，后面的模块基本是复用前面层的 qo 作为当前层的 qi
     def quantize(self, num_bits=8):
         self.qconv1 = QConv2d(self.conv1, qi=True, qo=True, num_bits=num_bits)
@@ -35,7 +35,7 @@ class Net(nn.Module):
         self.qmaxpool2d_2 = QMaxPooling2d(kernel_size=2, stride=2, padding=0)
         self.qfc = QLinear(self.fc, qi=False, qo=True, num_bits=num_bits)
 
-    # 统计 min、max，同时模拟量化误差
+    # 量化网络前向传播；统计 min、max，同时模拟量化误差
     def quantize_forward(self, x):
         x = self.qconv1(x)
         x = self.qrelu1(x)
@@ -76,6 +76,7 @@ class Net(nn.Module):
 
 class NetBN(nn.Module):
 
+    # 可改-定义网络的普通操作
     def __init__(self, num_channels=1):
         super(NetBN, self).__init__()
         self.conv1 = nn.Conv2d(num_channels, 40, 3, 1)
@@ -84,6 +85,7 @@ class NetBN(nn.Module):
         self.bn2 = nn.BatchNorm2d(40)
         self.fc = nn.Linear(5 * 5 * 40, 10)
 
+    # 可改-网络的普通前向传播
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -97,6 +99,9 @@ class NetBN(nn.Module):
         x = self.fc(x)
         return x
 
+    # 量化：设置量化函数的功能
+    # 只有第一层的 conv 需要 qi，后面的模块基本是复用前面层的 qo 作为当前层的 qi
+    # 卷积、BN、relu融合为一个
     def quantize(self, num_bits=8):
         self.qconv1 = QConvBNReLU(self.conv1, self.bn1, qi=True, qo=True, num_bits=num_bits)
         self.qmaxpool2d_1 = QMaxPooling2d(kernel_size=2, stride=2, padding=0)
@@ -104,6 +109,7 @@ class NetBN(nn.Module):
         self.qmaxpool2d_2 = QMaxPooling2d(kernel_size=2, stride=2, padding=0)
         self.qfc = QLinear(self.fc, qi=False, qo=True, num_bits=num_bits)
 
+    # 量化网络前向传播
     def quantize_forward(self, x):
         x = self.qconv1(x)
         x = self.qmaxpool2d_1(x)
@@ -113,6 +119,7 @@ class NetBN(nn.Module):
         x = self.qfc(x)
         return x
 
+    # 固化一些变量
     def freeze(self):
         self.qconv1.freeze()
         self.qmaxpool2d_1.freeze(self.qconv1.qo)
@@ -120,6 +127,8 @@ class NetBN(nn.Module):
         self.qmaxpool2d_2.freeze(self.qconv2.qo)
         self.qfc.freeze(qi=self.qconv2.qo)
 
+    # 量化推理
+    # 将输入 x 先量化到 int8，然后就是全量化的定点运算，得到最后一层的输出后，再反量化回 float 即可
     def quantize_inference(self, x):
         qx = self.qconv1.qi.quantize_tensor(x)
         qx = self.qconv1.quantize_inference(qx)
