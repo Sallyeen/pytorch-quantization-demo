@@ -51,7 +51,8 @@ if __name__ == "__main__":
     epochs = 3
     lr = 0.01
     momentum = 0.5
-    using_bn = True
+    # using_bn = True
+    using_bn = fal
     # load_quant_model_file = None
     load_quant_model_file = "ckpt/mnist_cnnbn_qat.pt"
 

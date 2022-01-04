@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from module import *
+from module_ptq import *
 
 class Net(nn.Module):
 
@@ -62,7 +62,6 @@ class Net(nn.Module):
     def quantize_inference(self, x):
         qx = self.qconv1.qi.quantize_tensor(x)
         qx = self.qconv1.quantize_inference(qx)
-        # print(qx) 正常
         qx = self.qrelu1.quantize_inference(qx)
         qx = self.qmaxpool2d_1.quantize_inference(qx)
         qx = self.qconv2.quantize_inference(qx)
@@ -72,7 +71,6 @@ class Net(nn.Module):
         qx = self.qfc.quantize_inference(qx)
         out = self.qfc.qo.dequantize_tensor(qx)
         return out
-
 
 class NetBN(nn.Module):
 
@@ -109,7 +107,7 @@ class NetBN(nn.Module):
         self.qmaxpool2d_2 = QMaxPooling2d(kernel_size=2, stride=2, padding=0)
         self.qfc = QLinear(self.fc, qi=False, qo=True, num_bits=num_bits)
 
-    # 量化网络前向传播
+    # 统计 min、max，同时模拟量化误差
     def quantize_forward(self, x):
         x = self.qconv1(x)
         x = self.qmaxpool2d_1(x)
@@ -119,7 +117,7 @@ class NetBN(nn.Module):
         x = self.qfc(x)
         return x
 
-    # 固化一些变量
+    # 统计完 min、max 后对一些变量进行固化
     def freeze(self):
         self.qconv1.freeze()
         self.qmaxpool2d_1.freeze(self.qconv1.qo)
@@ -129,6 +127,7 @@ class NetBN(nn.Module):
 
     # 量化推理
     # 将输入 x 先量化到 int8，然后就是全量化的定点运算，得到最后一层的输出后，再反量化回 float 即可
+    # 卷积操作在整数float 上计算
     def quantize_inference(self, x):
         qx = self.qconv1.qi.quantize_tensor(x)
         qx = self.qconv1.quantize_inference(qx)

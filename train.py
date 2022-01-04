@@ -52,7 +52,8 @@ if __name__ == "__main__":
     lr = 0.01
     momentum = 0.5
     save_model = True
-    using_bn = True
+    # using_bn = True
+    using_bn = False
 
     torch.manual_seed(seed) # 设置CPU生成随机数的种子，方便下次复现实验结果,因为下次跟本次一样
 
